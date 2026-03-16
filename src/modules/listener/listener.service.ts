@@ -21,6 +21,7 @@ export class ListenerService {
   private laravelWebhookUrl: string;
   private laravelApiSecret: string;
   private tronRpcUrl: string;
+  private tronApiKey: string;
   private tronApiType: string; // 'jsonrpc' or 'rest'
   private monitoredAddresses: Map<string, number> = new Map(); // address -> userId
 
@@ -36,7 +37,8 @@ export class ListenerService {
     this.laravelWebhookUrl = this.configService.get('LARAVEL_URL') + '/api/webhooks/deposit';
     this.laravelApiSecret = this.configService.get('LARAVEL_API_SECRET');
     this.tronRpcUrl = this.configService.get('TRON_RPC_URL');
-    this.tronApiType = this.configService.get('TRON_API_TYPE', 'jsonrpc');
+    this.tronApiKey = this.configService.get('TRON_API_KEY');
+    this.tronApiType = this.configService.get('TRON_API_TYPE', 'rest');
   }
 
   /**
@@ -172,6 +174,9 @@ export class ListenerService {
   private async getTransactionsViaRest(address: string): Promise<any[]> {
     const response = await axios.get(`${this.tronRpcUrl}/v1/accounts/${address}/transactions`, {
       params: { limit: 20 },
+      headers: {
+        'TRON-PRO-API-KEY': this.tronApiKey,
+      },
       timeout: 30000,
     });
 
@@ -276,13 +281,14 @@ export class ListenerService {
    */
   private async getTronTransactionInfo(txHash: string): Promise<any> {
     try {
-      // Use REST API for transaction info (works with both TronGrid and GetBlock)
-      const restUrl = this.tronRpcUrl.replace('/jsonrpc', '');
       const response = await axios.post(
-        `${restUrl}/wallet/gettransactioninfobyid`,
+        `${this.tronRpcUrl}/wallet/gettransactioninfobyid`,
         { value: txHash },
         {
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'TRON-PRO-API-KEY': this.tronApiKey,
+          },
           timeout: 30000,
         },
       );
@@ -298,12 +304,14 @@ export class ListenerService {
    */
   private async getTRC20TokenInfo(contractAddress: string): Promise<{ symbol: string; decimals: number }> {
     try {
-      const restUrl = this.tronRpcUrl.replace('/jsonrpc', '');
-      const headers = { 'Content-Type': 'application/json' };
+      const headers = {
+        'Content-Type': 'application/json',
+        'TRON-PRO-API-KEY': this.tronApiKey,
+      };
 
       // Get symbol
       const symbolResponse = await axios.post(
-        `${restUrl}/wallet/triggerconstantcontract`,
+        `${this.tronRpcUrl}/wallet/triggerconstantcontract`,
         {
           owner_address: '410000000000000000000000000000000000000000',
           contract_address: contractAddress,
@@ -315,7 +323,7 @@ export class ListenerService {
 
       // Get decimals
       const decimalsResponse = await axios.post(
-        `${restUrl}/wallet/triggerconstantcontract`,
+        `${this.tronRpcUrl}/wallet/triggerconstantcontract`,
         {
           owner_address: '410000000000000000000000000000000000000000',
           contract_address: contractAddress,
@@ -340,12 +348,14 @@ export class ListenerService {
    */
   private async getTronCurrentBlock(): Promise<number> {
     try {
-      const restUrl = this.tronRpcUrl.replace('/jsonrpc', '');
       const response = await axios.post(
-        `${restUrl}/wallet/getnowblock`,
+        `${this.tronRpcUrl}/wallet/getnowblock`,
         {},
         {
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'TRON-PRO-API-KEY': this.tronApiKey,
+          },
           timeout: 30000,
         },
       );
