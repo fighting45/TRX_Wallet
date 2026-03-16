@@ -1,9 +1,20 @@
 import { Controller, Post, Body, Get } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { WalletService } from './wallet.service';
 import { EncryptionService, EncryptedData } from '../encryption/encryption.service';
 import { BootstrapService } from '../listener/bootstrap.service';
 import { ConfigService } from '@nestjs/config';
+import {
+  GenerateMnemonicResponseDto,
+  GetAddressRequestDto,
+  GetAddressResponseDto,
+  ValidateAddressRequestDto,
+  ValidateAddressResponseDto,
+  ValidateMnemonicRequestDto,
+  ValidateMnemonicResponseDto,
+} from './dto/wallet.dto';
 
+@ApiTags('Laravel Integration')
 @Controller('wallet')
 export class WalletController {
   private masterPassword: string;
@@ -22,6 +33,22 @@ export class WalletController {
    * POST /wallet/generate-mnemonic
    */
   @Post('generate-mnemonic')
+  @ApiOperation({
+    summary: '1. Generate Master Mnemonic (One-Time Setup)',
+    description:
+      'Generate encrypted BIP39 mnemonic for your application.\n\n' +
+      '**IMPORTANT:** Run this ONCE during initial Laravel setup.\n\n' +
+      'Steps:\n' +
+      '1. Call this endpoint to generate encrypted mnemonic\n' +
+      '2. Store the entire `encrypted_mnemonic` object in Laravel database\n' +
+      '3. Use the same mnemonic for all user address generation\n\n' +
+      'Security: Mnemonic is encrypted with AES-256-GCM using MASTER_PASSWORD.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Encrypted mnemonic generated successfully',
+    type: GenerateMnemonicResponseDto,
+  })
   generateMnemonic(@Body('word_count') wordCount?: 12 | 24) {
     const mnemonic = this.walletService.generateMnemonic(wordCount || 12);
     const encrypted = this.encryptionService.encrypt(mnemonic, this.masterPassword);
