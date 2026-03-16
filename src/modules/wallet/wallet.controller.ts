@@ -65,6 +65,39 @@ export class WalletController {
    * POST /wallet/get-address
    */
   @Post('get-address')
+  @ApiOperation({
+    summary: '2. Generate User Deposit Address (Main Integration)',
+    description:
+      'Generate TRON address for a specific user.\n\n' +
+      '**When to call:**\n' +
+      '- User requests deposit address\n' +
+      '- User wallet page loads\n\n' +
+      '**How it works:**\n' +
+      '1. Pass encrypted mnemonic from Laravel DB\n' +
+      '2. Pass incremental index (user ID or counter)\n' +
+      '3. Pass user_id to auto-enable deposit monitoring\n' +
+      '4. Same index always returns same address (deterministic)\n\n' +
+      '**Example Flow:**\n' +
+      '- User 1 → index: 0 → Address: TW6nF...\n' +
+      '- User 2 → index: 1 → Address: TRA6K...\n\n' +
+      '**Auto-Monitoring:** When user_id is provided, address is automatically registered for deposit detection.',
+  })
+  @ApiBody({ type: GetAddressRequestDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Address generated successfully',
+    type: GetAddressResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid encrypted mnemonic or decryption failed',
+    schema: {
+      example: {
+        success: false,
+        error: 'Unsupported state or unable to authenticate data',
+      },
+    },
+  })
   async getAddressForUser(
     @Body('encrypted_mnemonic') encryptedMnemonic: EncryptedData,
     @Body('index') index: number,
@@ -102,12 +135,27 @@ export class WalletController {
    * POST /wallet/validate-mnemonic
    */
   @Post('validate-mnemonic')
+  @ApiOperation({
+    summary: '4. Validate Mnemonic (Optional Helper)',
+    description:
+      'Validate BIP39 mnemonic phrase.\n\n' +
+      '**Use cases:**\n' +
+      '- Validate user-imported mnemonics\n' +
+      '- Check backup phrase validity\n\n' +
+      '**Note:** Not needed for normal operations as mnemonic is auto-generated.',
+  })
+  @ApiBody({ type: ValidateMnemonicRequestDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Mnemonic validation result',
+    type: ValidateMnemonicResponseDto,
+  })
   validateMnemonic(@Body('mnemonic') mnemonic: string) {
     const isValid = this.walletService.validateMnemonic(mnemonic);
 
     return {
       success: true,
-      is_valid: isValid,
+      valid: isValid,
     };
   }
 
@@ -116,6 +164,7 @@ export class WalletController {
    * POST /wallet/master-public-key
    */
   @Post('master-public-key')
+  @ApiExcludeEndpoint()
   getMasterPublicKey(@Body('encrypted_mnemonic') encryptedMnemonic: EncryptedData) {
     try {
       const mnemonic = this.encryptionService.decrypt(encryptedMnemonic, this.masterPassword);
@@ -138,12 +187,33 @@ export class WalletController {
    * POST /wallet/validate-address
    */
   @Post('validate-address')
+  @ApiOperation({
+    summary: '3. Validate TRON Address (Optional Helper)',
+    description:
+      'Validate TRON address format before processing.\n\n' +
+      '**Use cases:**\n' +
+      '- Validate user withdrawal addresses\n' +
+      '- Check address format in forms\n' +
+      '- Prevent invalid address submissions\n\n' +
+      '**Validation checks:**\n' +
+      '- Starts with "T"\n' +
+      '- Base58 format\n' +
+      '- Valid checksum\n' +
+      '- Length: 34 characters',
+  })
+  @ApiBody({ type: ValidateAddressRequestDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Address validation result',
+    type: ValidateAddressResponseDto,
+  })
   validateAddress(@Body('address') address: string) {
     const isValid = this.walletService.isValidAddress(address);
 
     return {
       success: true,
-      is_valid: isValid,
+      valid: isValid,
+      address: address,
     };
   }
 
@@ -152,6 +222,7 @@ export class WalletController {
    * GET /wallet/health
    */
   @Get('health')
+  @ApiExcludeEndpoint()
   health() {
     return {
       success: true,
