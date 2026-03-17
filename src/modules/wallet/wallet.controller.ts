@@ -218,6 +218,85 @@ export class WalletController {
   }
 
   /**
+   * Get total balance across all addresses
+   * POST /wallet/total-balance
+   */
+  @Post('total-balance')
+  @ApiOperation({
+    summary: '5. Get Total Wallet Balance (Admin Panel)',
+    description:
+      'Query total balance across all addresses derived from a mnemonic.\n\n' +
+      '**Use case:**\n' +
+      '- Admin panel dashboard\n' +
+      '- Display total funds across all user deposit addresses\n' +
+      '- Hot wallet management\n\n' +
+      '**How it works:**\n' +
+      '1. Derives addresses from index 0 to max_index\n' +
+      '2. Queries TRON blockchain for each address balance\n' +
+      '3. Aggregates TRX and TRC20 token balances\n' +
+      '4. Returns total balance and breakdown\n\n' +
+      '**Note:** This may take time for large max_index values (queries blockchain in batches of 10).',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Total balance calculated successfully',
+    schema: {
+      example: {
+        success: true,
+        total_addresses_checked: 100,
+        addresses_with_balance: 3,
+        total_trx_balance: 150.5,
+        total_trc20_tokens: [
+          {
+            contract_address: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+            balance: 1000,
+            symbol: 'USDT',
+          },
+        ],
+        address_details: [
+          {
+            address: 'TVcJfoTSGdV5prT9cUfN8862ktDFdycW9H',
+            index: 111,
+            trx_balance: 0.5,
+            trc20_count: 0,
+          },
+          {
+            address: 'TYkzxwKnDeAR117e6pWVn7wTkPYJYPXSNH',
+            index: 0,
+            trx_balance: 150,
+            trc20_count: 1,
+          },
+        ],
+      },
+    },
+  })
+  async getTotalBalance(
+    @Body('encrypted_mnemonic') encryptedMnemonic: EncryptedData,
+    @Body('max_index') maxIndex?: number,
+  ) {
+    try {
+      // Decrypt mnemonic
+      const mnemonic = this.encryptionService.decrypt(encryptedMnemonic, this.masterPassword);
+
+      // Default to checking first 100 addresses
+      const maxIndexToCheck = maxIndex || 100;
+
+      // Get total balance
+      const balanceData = await this.walletService.getTotalWalletBalance(mnemonic, maxIndexToCheck);
+
+      return {
+        success: true,
+        ...balanceData,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
    * Health check
    * GET /wallet/health
    */

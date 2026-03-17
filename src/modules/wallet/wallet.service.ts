@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as bip39 from 'bip39';
 import { BIP32Factory } from 'bip32';
 import * as ecc from 'tiny-secp256k1';
 import { SigningKey } from '@ethersproject/signing-key';
 import { keccak256 } from '@ethersproject/keccak256';
 import * as crypto from 'crypto';
+import axios from 'axios';
 
 /**
  * WalletService - Handles Tron HD wallet operations
@@ -24,8 +26,26 @@ export class WalletService {
   // 0 = external chain (not change addresses)
   private readonly DERIVATION_PATH = "m/44'/195'/0'/0";
 
-  constructor() {
-    // No initialization needed
+  private tronRpcUrl: string;
+  private tronApiKeys: string[];
+  private currentApiKeyIndex = 0;
+
+  constructor(private configService: ConfigService) {
+    this.tronRpcUrl = this.configService.get('TRON_RPC_URL', 'https://api.trongrid.io');
+    const key1 = this.configService.get('TRON_API_KEY');
+    const key2 = this.configService.get('TRON_API_KEY_2');
+    const key3 = this.configService.get('TRON_API_KEY_3');
+    this.tronApiKeys = [key1, key2, key3].filter(Boolean);
+  }
+
+  /**
+   * Get next API key for rate limit rotation
+   */
+  private getNextApiKey(): string {
+    if (this.tronApiKeys.length === 0) return '';
+    const key = this.tronApiKeys[this.currentApiKeyIndex];
+    this.currentApiKeyIndex = (this.currentApiKeyIndex + 1) % this.tronApiKeys.length;
+    return key;
   }
 
   /**
@@ -264,6 +284,135 @@ export class WalletService {
 
     return masterNode.neutered().toBase58(); // neutered() removes private key
   }
+
+  /**
+   * Get balance for a single TRON address
+   *
+   * @param address - TRON address to query
+   * @returns Balance in TRX and TRC20 tokens
+   */
+  async getAddressBalance(address: string): Promise<AddressBalance> {
+    try {
+      const apiKey = this.getNextApiKey();
+      const headers = apiKey ? { 'TRON-PRO-API-KEY': apiKey } : {};
+
+      // Get account info from TronGrid
+      const response = await axios.get(`${this.tronRpcUrl}/v1/accounts/${address}`, {
+        headers,
+        timeout: 10000,
+      });
+
+      const accountData = response.data.data?.[0];
+
+      if (!accountData) {
+        // Account not activated yet (no balance)
+        return {
+          address,
+          trx_balance: 0,
+          trc20_tokens: [],
+        };
+      }
+
+      // TRX balance (in sun, 1 TRX = 1,000,000 sun)
+      const trxBalance = (accountData.balance || 0) / 1_000_000;
+
+      // TRC20 token balances
+      const trc20Tokens: TokenBalance[] = [];
+
+      if (accountData.trc20) {
+        for (const [contractAddress, tokenData] of Object.entries(accountData.trc20)) {
+          const balance = (tokenData as any)[Object.keys(tokenData as any)[0]] || 0;
+          trc20Tokens.push({
+            contract_address: contractAddress,
+            balance: balance,
+            symbol: 'UNKNOWN', // TronGrid doesn't provide symbol in this endpoint
+          });
+        }
+      }
+
+      return {
+        address,
+        trx_balance: trxBalance,
+        trc20_tokens: trc20Tokens,
+      };
+    } catch (error) {
+      console.error(`Failed to get balance for ${address}:`, error.message);
+      return {
+        address,
+        trx_balance: 0,
+        trc20_tokens: [],
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Get total balance across all addresses in a wallet
+   *
+   * @param mnemonic - Master mnemonic
+   * @param maxIndex - Maximum address index to check (default: 100)
+   * @returns Total balances aggregated
+   */
+  async getTotalWalletBalance(mnemonic: string, maxIndex: number = 100): Promise<TotalWalletBalance> {
+    // Derive all addresses
+    const addresses = this.deriveMultipleAddresses(mnemonic, 0, maxIndex);
+
+    console.log(`📊 Checking balance for ${addresses.length} addresses...`);
+
+    // Query balance for each address in parallel (batched to avoid rate limits)
+    const batchSize = 10;
+    const allBalances: AddressBalance[] = [];
+
+    for (let i = 0; i < addresses.length; i += batchSize) {
+      const batch = addresses.slice(i, i + batchSize);
+      const batchPromises = batch.map((addr) => this.getAddressBalance(addr.address));
+      const batchResults = await Promise.all(batchPromises);
+      allBalances.push(...batchResults);
+
+      console.log(`   ✓ Processed ${Math.min(i + batchSize, addresses.length)}/${addresses.length} addresses`);
+
+      // Small delay between batches to avoid rate limits
+      if (i + batchSize < addresses.length) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+
+    // Aggregate totals
+    const totalTrx = allBalances.reduce((sum, bal) => sum + bal.trx_balance, 0);
+
+    // Aggregate TRC20 tokens by contract address
+    const tokenMap = new Map<string, number>();
+    allBalances.forEach((bal) => {
+      bal.trc20_tokens.forEach((token) => {
+        const current = tokenMap.get(token.contract_address) || 0;
+        tokenMap.set(token.contract_address, current + token.balance);
+      });
+    });
+
+    const aggregatedTokens: TokenBalance[] = Array.from(tokenMap.entries()).map(([address, balance]) => ({
+      contract_address: address,
+      balance,
+      symbol: 'UNKNOWN',
+    }));
+
+    // Find addresses with non-zero balance
+    const addressesWithBalance = allBalances.filter(
+      (bal) => bal.trx_balance > 0 || bal.trc20_tokens.length > 0
+    );
+
+    return {
+      total_addresses_checked: addresses.length,
+      addresses_with_balance: addressesWithBalance.length,
+      total_trx_balance: totalTrx,
+      total_trc20_tokens: aggregatedTokens,
+      address_details: addressesWithBalance.map((bal) => ({
+        address: bal.address,
+        index: addresses.find((a) => a.address === bal.address)?.index || 0,
+        trx_balance: bal.trx_balance,
+        trc20_count: bal.trc20_tokens.length,
+      })),
+    };
+  }
 }
 
 /**
@@ -274,4 +423,39 @@ export interface TronAddress {
   privateKey: string; // Hex encoded private key
   derivationPath: string; // BIP44 derivation path used
   index: number; // Address index
+}
+
+/**
+ * Interface for TRC20 token balance
+ */
+export interface TokenBalance {
+  contract_address: string;
+  balance: number;
+  symbol: string;
+}
+
+/**
+ * Interface for address balance
+ */
+export interface AddressBalance {
+  address: string;
+  trx_balance: number;
+  trc20_tokens: TokenBalance[];
+  error?: string;
+}
+
+/**
+ * Interface for total wallet balance
+ */
+export interface TotalWalletBalance {
+  total_addresses_checked: number;
+  addresses_with_balance: number;
+  total_trx_balance: number;
+  total_trc20_tokens: TokenBalance[];
+  address_details: Array<{
+    address: string;
+    index: number;
+    trx_balance: number;
+    trc20_count: number;
+  }>;
 }
