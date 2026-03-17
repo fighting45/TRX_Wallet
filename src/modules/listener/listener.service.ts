@@ -60,12 +60,15 @@ export class ListenerService {
 
     while (true) {
       try {
+        console.log(`🔍 Checking ${addresses.length} addresses for deposits...`);
         // Check all monitored addresses
         for (const addr of addresses) {
+          console.log(`   📍 Checking address: ${addr.address}`);
           await this.checkTronDeposits(addr.user_id, addr.address);
         }
 
         consecutiveErrors = 0;
+        console.log(`⏰ Next check in 5 minutes (${new Date(Date.now() + 300000).toLocaleTimeString()})`);
         await this.sleep(300000); // Check every 5 minutes
       } catch (error) {
         consecutiveErrors++;
