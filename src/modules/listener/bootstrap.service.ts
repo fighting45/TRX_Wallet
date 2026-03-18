@@ -117,7 +117,8 @@ export class BootstrapService implements OnModuleInit {
         timeout: 10000,
       });
 
-      const addresses = response.data.addresses || [];
+      // Support both response formats: {addresses: [...]} or {data: [...]}
+      const addresses = response.data.addresses || response.data.data || [];
       console.log(`📥 Fetched ${addresses.length} addresses from Laravel`);
 
       // Filter only TRON addresses
