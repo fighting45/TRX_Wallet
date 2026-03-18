@@ -42,3 +42,9 @@ mnemonic-backup.json
 # Documentation (keep local, don't commit)
 [A-Z]*.md
 !README.md
+
+decrypt-mnemonic.js
+get-private-key-by-address.js
+find-address.js
+get-private-key-index9.js
+get-private-keys.js

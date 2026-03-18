@@ -121,8 +121,24 @@ export class BootstrapService implements OnModuleInit {
       const addresses = response.data.addresses || response.data.data || [];
       console.log(`📥 Fetched ${addresses.length} addresses from Laravel`);
 
-      // Filter only TRON addresses
-      const tronAddresses = addresses.filter((addr: any) => addr.network === 'tron');
+      // Log all addresses received for debugging
+      console.log('📋 Raw addresses received:', JSON.stringify(addresses, null, 2));
+
+      // Filter TRON addresses (case-insensitive check)
+      const tronAddresses = addresses.filter((addr: any) => {
+        const network = addr.network?.toLowerCase();
+        if (!network) {
+          console.warn(`⚠️  Address ${addr.address} has no network field, skipping`);
+          return false;
+        }
+        if (network !== 'tron') {
+          console.warn(`⚠️  Address ${addr.address} has network='${addr.network}' (expected 'tron'), skipping`);
+          return false;
+        }
+        return true;
+      });
+
+      console.log(`✅ Filtered ${tronAddresses.length} TRON addresses (${addresses.length - tronAddresses.length} skipped)`);
 
       return tronAddresses.map((addr: any) => ({
         user_id: addr.user_id,
