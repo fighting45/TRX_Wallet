@@ -324,21 +324,22 @@ export class WalletService {
       const trc20Tokens: TokenBalance[] = [];
 
       if (accountData.trc20) {
-        console.log(`📋 DEBUG - TRC20 data for ${address}:`, JSON.stringify(accountData.trc20, null, 2));
+        // TronGrid returns trc20 as either array or object
+        const trc20Data = Array.isArray(accountData.trc20) ? accountData.trc20 : [accountData.trc20];
 
-        for (const [contractAddress, tokenData] of Object.entries(accountData.trc20)) {
-          console.log(`   Contract: ${contractAddress}, Data:`, tokenData);
-
-          // Only track USDT tokens
-          if (contractAddress === this.USDT_CONTRACT) {
-            const balanceRaw = (tokenData as any)[Object.keys(tokenData as any)[0]] || 0;
-            const balance = balanceRaw / Math.pow(10, this.USDT_DECIMALS); // Convert to USDT (6 decimals)
-            trc20Tokens.push({
-              contract_address: contractAddress,
-              balance: balance,
-              symbol: 'USDT',
-            });
-            console.log(`   ✅ USDT found: ${balance} USDT`);
+        for (const tokenEntry of trc20Data) {
+          // Each entry is { "contractAddress": "balance" }
+          for (const [contractAddress, balanceRaw] of Object.entries(tokenEntry)) {
+            // Only track USDT tokens
+            if (contractAddress === this.USDT_CONTRACT) {
+              const balance = Number(balanceRaw) / Math.pow(10, this.USDT_DECIMALS);
+              trc20Tokens.push({
+                contract_address: contractAddress,
+                balance: balance,
+                symbol: 'USDT',
+              });
+              console.log(`   ✅ USDT found: ${balance} USDT at ${address.substring(0, 10)}...`);
+            }
           }
         }
       }
