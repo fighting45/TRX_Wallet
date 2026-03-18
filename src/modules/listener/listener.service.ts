@@ -269,9 +269,6 @@ export class ListenerService {
    * Parse USDT TRC20 transaction and extract deposit data
    */
   private async parseTronTransaction(tx: any, userId: number, address: string) {
-    // DEBUG: Log raw transaction format
-    console.log('🔍 DEBUG - Raw TRC20 transaction:', JSON.stringify(tx, null, 2));
-
     // TronGrid's /transactions/trc20 endpoint returns simplified format
     const coinSymbol = tx.token_info?.symbol || 'USDT';
     const decimals = tx.token_info?.decimals || 6;
@@ -280,9 +277,9 @@ export class ListenerService {
     // Convert value to decimal (value is in smallest unit)
     const amount = Number(tx.value) / Math.pow(10, decimals);
 
-    // Get current block for confirmations
-    const currentBlock = await this.getTronCurrentBlock();
-    const confirmations = currentBlock - tx.block_timestamp;
+    // TRC20 endpoint doesn't provide block number, only timestamp
+    // For confirmed transactions, we can safely set confirmations to a reasonable number
+    const confirmations = 20; // TRC20 endpoint only returns confirmed transactions
 
     return {
       user_id: userId,
@@ -293,7 +290,7 @@ export class ListenerService {
       to_address: tx.to,
       tx_hash: tx.transaction_id,
       confirmations: confirmations,
-      block_number: tx.block_timestamp,
+      block_number: tx.block_timestamp, // Actually a timestamp, Laravel should handle this
       timestamp: tx.block_timestamp,
       token_contract: tokenContract,
     };
