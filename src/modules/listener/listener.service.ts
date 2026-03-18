@@ -56,9 +56,10 @@ export class ListenerService {
     console.log(`👥 Monitoring ${addresses.length} TRON addresses`);
 
     // Build address map for fast lookup
+    // NOTE: TRON addresses are case-sensitive, don't convert to lowercase!
     this.monitoredAddresses.clear();
     for (const addr of addresses) {
-      this.monitoredAddresses.set(addr.address.toLowerCase(), addr.user_id);
+      this.monitoredAddresses.set(addr.address, addr.user_id);
     }
 
     this.isListenerRunning = true;
@@ -77,7 +78,12 @@ export class ListenerService {
         console.log(`🔍 Checking ${addressesToCheck.length} addresses for deposits...`);
         for (const addr of addressesToCheck) {
           console.log(`   📍 Checking address: ${addr.address}`);
-          await this.checkTronDeposits(addr.user_id, addr.address);
+          try {
+            await this.checkTronDeposits(addr.user_id, addr.address);
+          } catch (error: any) {
+            // Log error but continue checking other addresses
+            console.error(`   ⚠️  Error checking ${addr.address}: ${error.message}`);
+          }
         }
 
         consecutiveErrors = 0;
@@ -102,7 +108,7 @@ export class ListenerService {
    */
   async registerAddress(userId: number, address: string) {
     console.log(`➕ Registering new address for monitoring: ${address} (user ${userId})`);
-    this.monitoredAddresses.set(address.toLowerCase(), userId);
+    this.monitoredAddresses.set(address, userId); // Keep original case - TRON addresses are case-sensitive!
 
     // Auto-start listener if not already running
     if (!this.isListenerRunning) {
