@@ -4,7 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import axios from 'axios';
 import * as crypto from 'crypto';
-import { ProcessedDeposit, NetworkSyncState, WebhookQueue } from '../../entities';
+import { ProcessedDeposit, NetworkSyncState } from '../../entities';
 
 /**
  * ListenerService - Monitors TRON blockchain for deposits
@@ -32,8 +32,6 @@ export class ListenerService {
     private processedDepositRepo: Repository<ProcessedDeposit>,
     @InjectRepository(NetworkSyncState)
     private networkSyncStateRepo: Repository<NetworkSyncState>,
-    @InjectRepository(WebhookQueue)
-    private webhookQueueRepo: Repository<WebhookQueue>,
   ) {
     this.laravelWebhookUrl = this.configService.get('LARAVEL_URL') + '/api/v1/deposits/webhook';
     this.laravelApiSecret = this.configService.get('LARAVEL_API_SECRET');
@@ -465,50 +463,10 @@ export class ListenerService {
       );
     } catch (error) {
       console.error('❌ Failed to notify Laravel:', error.message);
-
-      // Save to retry queue - will keep trying until Laravel responds
-      await this.saveToWebhookQueue(depositData, error.message);
-      console.log(`📥 Deposit saved to retry queue - will retry on next check`);
+      console.log(`🔄 Will retry on next check cycle (transaction not marked as processed)`);
     }
   }
 
-  /**
-   * Save failed webhook to retry queue (with duplicate prevention)
-   */
-  private async saveToWebhookQueue(depositData: any, errorMessage: string): Promise<void> {
-    try {
-      const txHash = depositData.tx_hash;
-
-      // Check if this transaction is already in the queue
-      const existing = await this.webhookQueueRepo
-        .createQueryBuilder('webhook')
-        .where("webhook.deposit_data->>'tx_hash' = :txHash", { txHash })
-        .andWhere("webhook.status IN ('pending', 'processing')")
-        .getOne();
-
-      if (existing) {
-        // Update existing entry instead of creating duplicate
-        existing.retryCount += 1;
-        existing.lastError = errorMessage;
-        existing.nextRetryAt = new Date(Date.now() + 60000); // Retry in 1 minute
-        await this.webhookQueueRepo.save(existing);
-        console.log(`📝 Updated existing webhook queue entry (retry count: ${existing.retryCount})`);
-      } else {
-        // Create new entry
-        const webhookItem = this.webhookQueueRepo.create({
-          depositData: depositData,
-          retryCount: 0,
-          lastError: errorMessage,
-          nextRetryAt: new Date(Date.now() + 60000), // Retry in 1 minute
-          status: 'pending',
-        });
-        await this.webhookQueueRepo.save(webhookItem);
-        console.log(`📥 Added new webhook to retry queue`);
-      }
-    } catch (dbError) {
-      console.error('❌ CRITICAL: Failed to save to webhook queue:', dbError.message);
-    }
-  }
 
   // ==================== UTILITY METHODS ====================
 
