@@ -439,14 +439,17 @@ export class ListenerService {
    */
   private async notifyLaravelDeposit(depositData: any) {
     try {
-      // Create HMAC signature
+      // Convert to JSON string (this is what we'll sign AND send)
+      const jsonPayload = JSON.stringify(depositData);
+
+      // Create HMAC signature from the JSON string
       const signature = crypto
         .createHmac('sha256', this.laravelApiSecret)
-        .update(JSON.stringify(depositData))
+        .update(jsonPayload)
         .digest('hex');
 
-      // Send webhook FIRST
-      await axios.post(this.laravelWebhookUrl, depositData, {
+      // Send webhook FIRST - send the EXACT string we signed
+      await axios.post(this.laravelWebhookUrl, jsonPayload, {
         headers: {
           'X-Signature': signature,
           'Content-Type': 'application/json',

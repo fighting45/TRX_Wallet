@@ -223,48 +223,39 @@ export class WalletController {
    */
   @Post('total-balance')
   @ApiOperation({
-    summary: '5. Get Total Wallet Balance (Admin Panel)',
+    summary: '5. Get Total USDT Balance (Admin Panel)',
     description:
-      'Query total balance across all addresses derived from a mnemonic.\n\n' +
+      'Query total USDT balance across all addresses derived from a mnemonic.\n\n' +
       '**Use case:**\n' +
       '- Admin panel dashboard\n' +
-      '- Display total funds across all user deposit addresses\n' +
-      '- Hot wallet management\n\n' +
+      '- Display total USDT funds across all user deposit addresses\n' +
+      '- Hot wallet USDT management\n\n' +
       '**How it works:**\n' +
       '1. Derives addresses from index 0 to max_index\n' +
-      '2. Queries TRON blockchain for each address balance\n' +
-      '3. Aggregates TRX and TRC20 token balances\n' +
-      '4. Returns total balance and breakdown\n\n' +
+      '2. Queries TRON blockchain for each address\n' +
+      '3. Aggregates USDT (TRC20) balances only\n' +
+      '4. Returns total USDT balance and per-address breakdown\n\n' +
       '**Note:** This may take time for large max_index values (queries blockchain in batches of 10).',
   })
   @ApiResponse({
     status: 200,
-    description: 'Total balance calculated successfully',
+    description: 'Total USDT balance calculated successfully',
     schema: {
       example: {
         success: true,
         total_addresses_checked: 100,
-        addresses_with_balance: 3,
-        total_trx_balance: 150.5,
-        total_trc20_tokens: [
-          {
-            contract_address: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
-            balance: 1000,
-            symbol: 'USDT',
-          },
-        ],
+        addresses_with_balance: 2,
+        total_usdt_balance: 1053.50,
         address_details: [
-          {
-            address: 'TVcJfoTSGdV5prT9cUfN8862ktDFdycW9H',
-            index: 111,
-            trx_balance: 0.5,
-            trc20_count: 0,
-          },
           {
             address: 'TYkzxwKnDeAR117e6pWVn7wTkPYJYPXSNH',
             index: 0,
-            trx_balance: 150,
-            trc20_count: 1,
+            usdt_balance: 1000.00,
+          },
+          {
+            address: 'TVcJfoTSGdV5prT9cUfN8862ktDFdycW9H',
+            index: 9,
+            usdt_balance: 53.50,
           },
         ],
       },

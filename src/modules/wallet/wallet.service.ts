@@ -30,6 +30,10 @@ export class WalletService {
   private tronApiKeys: string[];
   private currentApiKeyIndex = 0;
 
+  // USDT TRC20 contract address (mainnet)
+  private readonly USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+  private readonly USDT_DECIMALS = 6;
+
   constructor(private configService: ConfigService) {
     this.tronRpcUrl = this.configService.get('TRON_RPC_URL', 'https://api.trongrid.io');
     const key1 = this.configService.get('TRON_API_KEY');
@@ -316,17 +320,26 @@ export class WalletService {
       // TRX balance (in sun, 1 TRX = 1,000,000 sun)
       const trxBalance = (accountData.balance || 0) / 1_000_000;
 
-      // TRC20 token balances
+      // TRC20 token balances (USDT only)
       const trc20Tokens: TokenBalance[] = [];
 
       if (accountData.trc20) {
+        console.log(`📋 DEBUG - TRC20 data for ${address}:`, JSON.stringify(accountData.trc20, null, 2));
+
         for (const [contractAddress, tokenData] of Object.entries(accountData.trc20)) {
-          const balance = (tokenData as any)[Object.keys(tokenData as any)[0]] || 0;
-          trc20Tokens.push({
-            contract_address: contractAddress,
-            balance: balance,
-            symbol: 'UNKNOWN', // TronGrid doesn't provide symbol in this endpoint
-          });
+          console.log(`   Contract: ${contractAddress}, Data:`, tokenData);
+
+          // Only track USDT tokens
+          if (contractAddress === this.USDT_CONTRACT) {
+            const balanceRaw = (tokenData as any)[Object.keys(tokenData as any)[0]] || 0;
+            const balance = balanceRaw / Math.pow(10, this.USDT_DECIMALS); // Convert to USDT (6 decimals)
+            trc20Tokens.push({
+              contract_address: contractAddress,
+              balance: balance,
+              symbol: 'USDT',
+            });
+            console.log(`   ✅ USDT found: ${balance} USDT`);
+          }
         }
       }
 
@@ -377,40 +390,31 @@ export class WalletService {
       }
     }
 
-    // Aggregate totals
-    const totalTrx = allBalances.reduce((sum, bal) => sum + bal.trx_balance, 0);
-
-    // Aggregate TRC20 tokens by contract address
-    const tokenMap = new Map<string, number>();
+    // Aggregate USDT balance only
+    let totalUsdt = 0;
     allBalances.forEach((bal) => {
       bal.trc20_tokens.forEach((token) => {
-        const current = tokenMap.get(token.contract_address) || 0;
-        tokenMap.set(token.contract_address, current + token.balance);
+        if (token.symbol === 'USDT') {
+          totalUsdt += token.balance;
+        }
       });
     });
 
-    const aggregatedTokens: TokenBalance[] = Array.from(tokenMap.entries()).map(([address, balance]) => ({
-      contract_address: address,
-      balance,
-      symbol: 'UNKNOWN',
-    }));
-
-    // Find addresses with non-zero balance
-    const addressesWithBalance = allBalances.filter(
-      (bal) => bal.trx_balance > 0 || bal.trc20_tokens.length > 0
-    );
+    // Find addresses with USDT balance
+    const addressesWithUsdt = allBalances.filter((bal) => bal.trc20_tokens.length > 0);
 
     return {
       total_addresses_checked: addresses.length,
-      addresses_with_balance: addressesWithBalance.length,
-      total_trx_balance: totalTrx,
-      total_trc20_tokens: aggregatedTokens,
-      address_details: addressesWithBalance.map((bal) => ({
-        address: bal.address,
-        index: addresses.find((a) => a.address === bal.address)?.index || 0,
-        trx_balance: bal.trx_balance,
-        trc20_count: bal.trc20_tokens.length,
-      })),
+      addresses_with_balance: addressesWithUsdt.length,
+      total_usdt_balance: parseFloat(totalUsdt.toFixed(2)), // Round to 2 decimals
+      address_details: addressesWithUsdt.map((bal) => {
+        const usdtToken = bal.trc20_tokens.find((t) => t.symbol === 'USDT');
+        return {
+          address: bal.address,
+          index: addresses.find((a) => a.address === bal.address)?.index || 0,
+          usdt_balance: usdtToken ? parseFloat(usdtToken.balance.toFixed(2)) : 0,
+        };
+      }),
     };
   }
 }
@@ -445,17 +449,15 @@ export interface AddressBalance {
 }
 
 /**
- * Interface for total wallet balance
+ * Interface for total wallet balance (USDT only)
  */
 export interface TotalWalletBalance {
   total_addresses_checked: number;
   addresses_with_balance: number;
-  total_trx_balance: number;
-  total_trc20_tokens: TokenBalance[];
+  total_usdt_balance: number;
   address_details: Array<{
     address: string;
     index: number;
-    trx_balance: number;
-    trc20_count: number;
+    usdt_balance: number;
   }>;
 }
