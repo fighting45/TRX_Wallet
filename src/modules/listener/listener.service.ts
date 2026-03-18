@@ -35,7 +35,7 @@ export class ListenerService {
     @InjectRepository(WebhookQueue)
     private webhookQueueRepo: Repository<WebhookQueue>,
   ) {
-    this.laravelWebhookUrl = this.configService.get('LARAVEL_URL') + '/api/deposits/webhook';
+    this.laravelWebhookUrl = this.configService.get('LARAVEL_URL') + '/api/v1/deposits/webhook';
     this.laravelApiSecret = this.configService.get('LARAVEL_API_SECRET');
     this.tronRpcUrl = this.configService.get('TRON_RPC_URL');
     this.tronApiKey = this.configService.get('TRON_API_KEY');

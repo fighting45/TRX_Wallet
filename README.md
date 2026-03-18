@@ -211,7 +211,7 @@ Header: X-API-Secret: {LARAVEL_API_SECRET}
 Receive deposit notifications:
 
 ```php
-Route::post('/api/deposits/webhook', function (Request $request) {
+Route::post('/api/v1/deposits/webhook', function (Request $request) {
     // Verify signature
     $signature = hash_hmac('sha256', $request->getContent(), env('WALLET_API_SECRET'));
     if ($signature !== $request->header('X-Signature')) {

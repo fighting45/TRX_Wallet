@@ -28,7 +28,7 @@ async function bootstrap() {
       "**Quick Start:**\n" +
       "1. Call `/wallet/generate-mnemonic` **ONCE** during setup → Store encrypted mnemonic in Laravel DB\n" +
       "2. Call `/wallet/get-address` with user_id whenever user needs deposit address\n" +
-      "3. Implement webhook endpoint `POST /api/deposits/webhook` in Laravel to receive deposits\n\n" +
+      "3. Implement webhook endpoint `POST /api/v1/deposits/webhook` in Laravel to receive deposits\n\n" +
       "**Deposit Detection:**\n" +
       "- Automatic monitoring every 5 minutes\n" +
       "- Webhooks sent to Laravel with HMAC signature\n" +

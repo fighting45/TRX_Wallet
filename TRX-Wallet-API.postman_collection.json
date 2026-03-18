@@ -283,7 +283,7 @@
           "raw": "{\n  \"user_id\": 1,\n  \"network\": \"tron\",\n  \"coin_symbol\": \"TRX\",\n  \"amount\": 100.5,\n  \"from_address\": \"TSenderAddressExample123456789\",\n  \"to_address\": \"TYourUserDepositAddress123456\",\n  \"tx_hash\": \"abc123def456...\",\n  \"confirmations\": 19,\n  \"block_number\": 12345678,\n  \"timestamp\": 1678901234000,\n  \"token_contract\": null\n}"
         },
         "url": {
-          "raw": "{{LARAVEL_URL}}/api/deposits/webhook",
+          "raw": "{{LARAVEL_URL}}/api/v1/deposits/webhook",
           "host": ["{{LARAVEL_URL}}"],
           "path": ["api", "deposits", "webhook"]
         },
