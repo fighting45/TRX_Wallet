@@ -18,10 +18,14 @@ import { ProcessedDeposit, NetworkSyncState } from '../../entities';
  */
 @Injectable()
 export class ListenerService {
+  // USDT TRC20 contract address (mainnet)
+  private readonly USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+
   private laravelWebhookUrl: string;
   private laravelApiSecret: string;
   private tronRpcUrl: string;
-  private tronApiKey: string;
+  private tronApiKeys: string[];
+  private currentApiKeyIndex = 0;
   private tronApiType: string; // 'jsonrpc' or 'rest'
   private monitoredAddresses: Map<string, number> = new Map(); // address -> userId
   private isListenerRunning: boolean = false; // Track if listener is active
@@ -36,8 +40,21 @@ export class ListenerService {
     this.laravelWebhookUrl = this.configService.get('LARAVEL_URL') + '/api/v1/deposits/webhook';
     this.laravelApiSecret = this.configService.get('LARAVEL_API_SECRET');
     this.tronRpcUrl = this.configService.get('TRON_RPC_URL');
-    this.tronApiKey = this.configService.get('TRON_API_KEY');
+    const key1 = this.configService.get('TRON_API_KEY');
+    const key2 = this.configService.get('TRON_API_KEY_2');
+    const key3 = this.configService.get('TRON_API_KEY_3');
+    this.tronApiKeys = [key1, key2, key3].filter(Boolean);
     this.tronApiType = this.configService.get('TRON_API_TYPE', 'rest');
+  }
+
+  /**
+   * Get next API key for rate limit rotation
+   */
+  private getNextApiKey(): string {
+    if (this.tronApiKeys.length === 0) return '';
+    const key = this.tronApiKeys[this.currentApiKeyIndex];
+    this.currentApiKeyIndex = (this.currentApiKeyIndex + 1) % this.tronApiKeys.length;
+    return key;
   }
 
   /**
@@ -204,49 +221,44 @@ export class ListenerService {
   }
 
   /**
-   * Get transactions via TronGrid REST API
+   * Get TRC20 transactions via TronGrid REST API (USDT only)
    */
   private async getTransactionsViaRest(address: string): Promise<any[]> {
-    const response = await axios.get(`${this.tronRpcUrl}/v1/accounts/${address}/transactions`, {
-      params: { limit: 20 },
-      headers: {
-        'TRON-PRO-API-KEY': this.tronApiKey,
-      },
-      timeout: 30000,
-    });
+    const apiKey = this.getNextApiKey();
+    const headers = apiKey ? { 'TRON-PRO-API-KEY': apiKey } : {};
 
-    return response.data.data || [];
+    try {
+      // Fetch ONLY TRC20 token transactions (USDT)
+      const response = await axios.get(`${this.tronRpcUrl}/v1/accounts/${address}/transactions/trc20`, {
+        params: {
+          limit: 20,
+          only_confirmed: true,
+          contract_address: this.USDT_CONTRACT, // Filter for USDT only
+        },
+        headers,
+        timeout: 30000,
+      });
+
+      const trc20Txs = response.data.data || [];
+      console.log(`   📥 Found ${trc20Txs.length} USDT transactions for ${address.substring(0, 8)}...`);
+
+      return trc20Txs;
+    } catch (error) {
+      console.error(`Error fetching USDT transactions for ${address}:`, error.message);
+      return [];
+    }
   }
 
   /**
-   * Check if transaction is incoming to our address
+   * Check if transaction is incoming USDT to our address
    */
   private async isTronIncoming(tx: any, address: string): Promise<boolean> {
-    const contract = tx.raw_data?.contract?.[0];
-    if (!contract) return false;
-
-    // Check native TRX transfers
-    if (contract.type === 'TransferContract') {
-      const toAddress = contract.parameter?.value?.to_address;
-      if (toAddress && this.tronHexToBase58(toAddress) === address) {
+    // USDT deposits only - check if 'to' field matches our address
+    // TronGrid's /transactions/trc20 endpoint returns simplified format
+    if (tx.to && tx.to === address) {
+      // Verify it's USDT contract
+      if (tx.token_info?.address === this.USDT_CONTRACT) {
         return true;
-      }
-    }
-
-    // Check TRC20 token transfers
-    if (contract.type === 'TriggerSmartContract') {
-      const txInfo = await this.getTronTransactionInfo(tx.txID);
-
-      if (txInfo?.log && txInfo.log.length > 0) {
-        for (const log of txInfo.log) {
-          // Transfer event topic
-          if (log.topics && log.topics[0] === 'ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef') {
-            const toAddress = log.topics[2];
-            if (toAddress && this.tronHexToBase58('41' + toAddress) === address) {
-              return true;
-            }
-          }
-        }
       }
     }
 
@@ -254,58 +266,31 @@ export class ListenerService {
   }
 
   /**
-   * Parse TRON transaction and extract deposit data
+   * Parse USDT TRC20 transaction and extract deposit data
    */
   private async parseTronTransaction(tx: any, userId: number, address: string) {
-    const contract = tx.raw_data.contract[0];
-    const value = contract.parameter.value;
+    // TronGrid's /transactions/trc20 endpoint returns simplified format
+    const coinSymbol = tx.token_info?.symbol || 'USDT';
+    const decimals = tx.token_info?.decimals || 6;
+    const tokenContract = tx.token_info?.address || this.USDT_CONTRACT;
+
+    // Convert value to decimal (value is in smallest unit)
+    const amount = Number(tx.value) / Math.pow(10, decimals);
 
     // Get current block for confirmations
     const currentBlock = await this.getTronCurrentBlock();
-    const confirmations = currentBlock - tx.blockNumber;
-
-    let coinSymbol = 'TRX';
-    let amount = 0;
-    let tokenContract = null;
-
-    if (contract.type === 'TransferContract') {
-      // Native TRX transfer
-      coinSymbol = 'TRX';
-      amount = value.amount / 1e6; // Convert SUN to TRX
-    } else if (contract.type === 'TriggerSmartContract') {
-      // TRC20 token transfer
-      const txInfo = await this.getTronTransactionInfo(tx.txID);
-
-      if (txInfo?.log && txInfo.log.length > 0) {
-        const transferLog = txInfo.log.find(
-          (log) => log.topics && log.topics[0] === 'ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
-        );
-
-        if (transferLog) {
-          tokenContract = this.tronHexToBase58('41' + txInfo.contract_address);
-
-          // Get token info
-          const tokenInfo = await this.getTRC20TokenInfo(tokenContract);
-          coinSymbol = tokenInfo.symbol;
-
-          // Decode amount
-          const amountHex = transferLog.data;
-          const amountBigInt = BigInt('0x' + amountHex);
-          amount = Number(amountBigInt) / Math.pow(10, tokenInfo.decimals);
-        }
-      }
-    }
+    const confirmations = currentBlock - tx.block_timestamp;
 
     return {
       user_id: userId,
       network: 'tron',
       coin_symbol: coinSymbol,
       amount: amount,
-      from_address: this.tronHexToBase58(value.owner_address || value.from),
-      to_address: address,
-      tx_hash: tx.txID,
+      from_address: tx.from,
+      to_address: tx.to,
+      tx_hash: tx.transaction_id,
       confirmations: confirmations,
-      block_number: tx.blockNumber,
+      block_number: tx.block_timestamp,
       timestamp: tx.block_timestamp,
       token_contract: tokenContract,
     };
@@ -316,16 +301,16 @@ export class ListenerService {
    */
   private async getTronTransactionInfo(txHash: string): Promise<any> {
     try {
+      const apiKey = this.getNextApiKey();
+      const headers = apiKey ? {
+        'Content-Type': 'application/json',
+        'TRON-PRO-API-KEY': apiKey,
+      } : { 'Content-Type': 'application/json' };
+
       const response = await axios.post(
         `${this.tronRpcUrl}/wallet/gettransactioninfobyid`,
         { value: txHash },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'TRON-PRO-API-KEY': this.tronApiKey,
-          },
-          timeout: 30000,
-        },
+        { headers, timeout: 30000 },
       );
       return response.data;
     } catch (error) {
@@ -339,10 +324,11 @@ export class ListenerService {
    */
   private async getTRC20TokenInfo(contractAddress: string): Promise<{ symbol: string; decimals: number }> {
     try {
-      const headers = {
+      const apiKey = this.getNextApiKey();
+      const headers = apiKey ? {
         'Content-Type': 'application/json',
-        'TRON-PRO-API-KEY': this.tronApiKey,
-      };
+        'TRON-PRO-API-KEY': apiKey,
+      } : { 'Content-Type': 'application/json' };
 
       // Get symbol
       const symbolResponse = await axios.post(
@@ -383,16 +369,16 @@ export class ListenerService {
    */
   private async getTronCurrentBlock(): Promise<number> {
     try {
+      const apiKey = this.getNextApiKey();
+      const headers = apiKey ? {
+        'Content-Type': 'application/json',
+        'TRON-PRO-API-KEY': apiKey,
+      } : { 'Content-Type': 'application/json' };
+
       const response = await axios.post(
         `${this.tronRpcUrl}/wallet/getnowblock`,
         {},
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'TRON-PRO-API-KEY': this.tronApiKey,
-          },
-          timeout: 30000,
-        },
+        { headers, timeout: 30000 },
       );
       return response.data.block_header.raw_data.number;
     } catch (error) {
