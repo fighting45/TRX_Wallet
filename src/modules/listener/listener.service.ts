@@ -439,16 +439,13 @@ export class ListenerService {
    */
   private async notifyLaravelDeposit(depositData: any) {
     try {
-      // Save to database first (idempotency)
-      await this.saveProcessedDeposit(depositData);
-
       // Create HMAC signature
       const signature = crypto
         .createHmac('sha256', this.laravelApiSecret)
         .update(JSON.stringify(depositData))
         .digest('hex');
 
-      // Send webhook
+      // Send webhook FIRST
       await axios.post(this.laravelWebhookUrl, depositData, {
         headers: {
           'X-Signature': signature,
@@ -457,15 +454,18 @@ export class ListenerService {
         timeout: 10000,
       });
 
+      // Only save to database AFTER successful webhook (idempotency)
+      await this.saveProcessedDeposit(depositData);
+
       console.log(
         `✅ Notified Laravel: ${depositData.amount} ${depositData.coin_symbol} to user ${depositData.user_id} (tx: ${depositData.tx_hash.substring(0, 10)}...)`,
       );
     } catch (error) {
       console.error('❌ Failed to notify Laravel:', error.message);
 
-      // Save to retry queue
+      // Save to retry queue - will keep trying until Laravel responds
       await this.saveToWebhookQueue(depositData, error.message);
-      console.log(`📥 Deposit saved to retry queue`);
+      console.log(`📥 Deposit saved to retry queue - will retry on next check`);
     }
   }
 
