@@ -38,3 +38,7 @@ lerna-debug.log*
 .env
 
 mnemonic-backup.json
+
+# Documentation (keep local, don't commit)
+[A-Z]*.md
+!README.md
