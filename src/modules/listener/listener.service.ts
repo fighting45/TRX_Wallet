@@ -470,19 +470,38 @@ export class ListenerService {
   }
 
   /**
-   * Save failed webhook to retry queue
+   * Save failed webhook to retry queue (with duplicate prevention)
    */
   private async saveToWebhookQueue(depositData: any, errorMessage: string): Promise<void> {
     try {
-      const webhookItem = this.webhookQueueRepo.create({
-        depositData: depositData,
-        retryCount: 0,
-        lastError: errorMessage,
-        nextRetryAt: new Date(Date.now() + 60000), // Retry in 1 minute
-        status: 'pending',
-      });
+      const txHash = depositData.tx_hash;
 
-      await this.webhookQueueRepo.save(webhookItem);
+      // Check if this transaction is already in the queue
+      const existing = await this.webhookQueueRepo
+        .createQueryBuilder('webhook')
+        .where("webhook.deposit_data->>'tx_hash' = :txHash", { txHash })
+        .andWhere("webhook.status IN ('pending', 'processing')")
+        .getOne();
+
+      if (existing) {
+        // Update existing entry instead of creating duplicate
+        existing.retryCount += 1;
+        existing.lastError = errorMessage;
+        existing.nextRetryAt = new Date(Date.now() + 60000); // Retry in 1 minute
+        await this.webhookQueueRepo.save(existing);
+        console.log(`📝 Updated existing webhook queue entry (retry count: ${existing.retryCount})`);
+      } else {
+        // Create new entry
+        const webhookItem = this.webhookQueueRepo.create({
+          depositData: depositData,
+          retryCount: 0,
+          lastError: errorMessage,
+          nextRetryAt: new Date(Date.now() + 60000), // Retry in 1 minute
+          status: 'pending',
+        });
+        await this.webhookQueueRepo.save(webhookItem);
+        console.log(`📥 Added new webhook to retry queue`);
+      }
     } catch (dbError) {
       console.error('❌ CRITICAL: Failed to save to webhook queue:', dbError.message);
     }
