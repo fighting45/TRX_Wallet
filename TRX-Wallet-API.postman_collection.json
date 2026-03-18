@@ -1,0 +1,312 @@
+{
+  "info": {
+    "name": "TRX Wallet Service API",
+    "description": "TRON (TRX/TRC20) Wallet Management API for Laravel Integration",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "trx-wallet-service"
+  },
+  "item": [
+    {
+      "name": "1. Generate Master Mnemonic",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"word_count\": 12\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/api/wallet/generate-mnemonic",
+          "host": ["{{BASE_URL}}"],
+          "path": ["api", "wallet", "generate-mnemonic"]
+        },
+        "description": "**ONE-TIME SETUP**: Generate encrypted BIP39 mnemonic for your application.\n\nSteps:\n1. Call this endpoint to generate encrypted mnemonic\n2. Store the entire `encrypted_mnemonic` object in Laravel database\n3. Use the same mnemonic for all user address generation\n\n**Parameters:**\n- `word_count` (optional): 12 or 24 words (default: 12)"
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"word_count\": 12\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/wallet/generate-mnemonic",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "wallet", "generate-mnemonic"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [],
+          "body": "{\n  \"success\": true,\n  \"encrypted_mnemonic\": {\n    \"encryptedData\": \"...\",\n    \"iv\": \"...\",\n    \"authTag\": \"...\"\n  },\n  \"message\": \"Mnemonic generated and encrypted. Store this securely in Laravel database.\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "2. Generate User Deposit Address",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"encrypted_mnemonic\": {\n    \"encryptedData\": \"your_encrypted_data_here\",\n    \"iv\": \"your_iv_here\",\n    \"authTag\": \"your_auth_tag_here\"\n  },\n  \"index\": 0,\n  \"user_id\": 1\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/api/wallet/get-address",
+          "host": ["{{BASE_URL}}"],
+          "path": ["api", "wallet", "get-address"]
+        },
+        "description": "**MAIN INTEGRATION**: Generate TRON address for a specific user.\n\n**When to call:**\n- User requests deposit address\n- User wallet page loads\n\n**How it works:**\n1. Pass encrypted mnemonic from Laravel DB\n2. Pass incremental index (user ID or counter)\n3. Pass user_id to auto-enable deposit monitoring\n4. Same index always returns same address (deterministic)\n\n**Parameters:**\n- `encrypted_mnemonic`: Encrypted mnemonic object from step 1\n- `index`: Unique number for each user (0, 1, 2, ...)\n- `user_id` (optional): Laravel user ID for auto-monitoring"
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"encrypted_mnemonic\": {...},\n  \"index\": 0,\n  \"user_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/wallet/get-address",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "wallet", "get-address"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [],
+          "body": "{\n  \"success\": true,\n  \"address\": \"TW6nF1Jw9VpMZKhLmK9BvgbVJk8qKqW9Xd\",\n  \"index\": 0,\n  \"derivation_path\": \"m/44'/195'/0'/0/0\",\n  \"monitoring\": true\n}"
+        }
+      ]
+    },
+    {
+      "name": "3. Validate TRON Address",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"address\": \"TW6nF1Jw9VpMZKhLmK9BvgbVJk8qKqW9Xd\"\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/api/wallet/validate-address",
+          "host": ["{{BASE_URL}}"],
+          "path": ["api", "wallet", "validate-address"]
+        },
+        "description": "**OPTIONAL HELPER**: Validate TRON address format before processing.\n\n**Use cases:**\n- Validate user withdrawal addresses\n- Check address format in forms\n- Prevent invalid address submissions\n\n**Validation checks:**\n- Starts with \"T\"\n- Base58 format\n- Valid checksum\n- Length: 34 characters\n\n**Parameters:**\n- `address`: TRON address to validate"
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address\": \"TW6nF1Jw9VpMZKhLmK9BvgbVJk8qKqW9Xd\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/wallet/validate-address",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "wallet", "validate-address"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [],
+          "body": "{\n  \"success\": true,\n  \"valid\": true,\n  \"address\": \"TW6nF1Jw9VpMZKhLmK9BvgbVJk8qKqW9Xd\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "4. Validate Mnemonic",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"mnemonic\": \"word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 word11 word12\"\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/api/wallet/validate-mnemonic",
+          "host": ["{{BASE_URL}}"],
+          "path": ["api", "wallet", "validate-mnemonic"]
+        },
+        "description": "**OPTIONAL HELPER**: Validate BIP39 mnemonic phrase.\n\n**Use cases:**\n- Validate user-imported mnemonics\n- Check backup phrase validity\n\n**Note:** Not needed for normal operations as mnemonic is auto-generated.\n\n**Parameters:**\n- `mnemonic`: Space-separated mnemonic words (12 or 24 words)"
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mnemonic\": \"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/wallet/validate-mnemonic",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "wallet", "validate-mnemonic"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [],
+          "body": "{\n  \"success\": true,\n  \"valid\": true\n}"
+        }
+      ]
+    },
+    {
+      "name": "5. Get Total Wallet Balance",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"encrypted_mnemonic\": {\n    \"encryptedData\": \"your_encrypted_data_here\",\n    \"iv\": \"your_iv_here\",\n    \"authTag\": \"your_auth_tag_here\"\n  },\n  \"max_index\": 100\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/api/wallet/total-balance",
+          "host": ["{{BASE_URL}}"],
+          "path": ["api", "wallet", "total-balance"]
+        },
+        "description": "**ADMIN PANEL**: Query total balance across all addresses derived from a mnemonic.\n\n**Use case:**\n- Admin panel dashboard\n- Display total funds across all user deposit addresses\n- Hot wallet management\n\n**How it works:**\n1. Derives addresses from index 0 to max_index\n2. Queries TRON blockchain for each address balance\n3. Aggregates TRX and TRC20 token balances\n4. Returns total balance and breakdown\n\n**Parameters:**\n- `encrypted_mnemonic`: Encrypted mnemonic object\n- `max_index` (optional): Maximum address index to check (default: 100)\n\n**Note:** This may take time for large max_index values."
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"encrypted_mnemonic\": {...},\n  \"max_index\": 100\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/wallet/total-balance",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "wallet", "total-balance"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [],
+          "body": "{\n  \"success\": true,\n  \"total_addresses_checked\": 100,\n  \"addresses_with_balance\": 3,\n  \"total_trx_balance\": 150.5,\n  \"total_trc20_tokens\": [\n    {\n      \"contract_address\": \"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t\",\n      \"balance\": 1000,\n      \"symbol\": \"USDT\"\n    }\n  ],\n  \"address_details\": [\n    {\n      \"address\": \"TYkzxwKnDeAR117e6pWVn7wTkPYJYPXSNH\",\n      \"index\": 0,\n      \"trx_balance\": 150,\n      \"trc20_count\": 1\n    }\n  ]\n}"
+        }
+      ]
+    },
+    {
+      "name": "6. Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{BASE_URL}}/api/wallet/health",
+          "host": ["{{BASE_URL}}"],
+          "path": ["api", "wallet", "health"]
+        },
+        "description": "**HEALTH CHECK**: Verify that the TRX Wallet Service is operational.\n\n**Use case:**\n- Monitoring and alerting\n- Docker health checks\n- Service status verification"
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/api/wallet/health",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "wallet", "health"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [],
+          "body": "{\n  \"success\": true,\n  \"service\": \"TRX Wallet Service\",\n  \"network\": \"TRON\",\n  \"status\": \"operational\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Webhook - Deposit Notification (Laravel Receives)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Signature",
+            "value": "{{HMAC_SIGNATURE}}",
+            "description": "HMAC-SHA256 signature of request body"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"user_id\": 1,\n  \"network\": \"tron\",\n  \"coin_symbol\": \"TRX\",\n  \"amount\": 100.5,\n  \"from_address\": \"TSenderAddressExample123456789\",\n  \"to_address\": \"TYourUserDepositAddress123456\",\n  \"tx_hash\": \"abc123def456...\",\n  \"confirmations\": 19,\n  \"block_number\": 12345678,\n  \"timestamp\": 1678901234000,\n  \"token_contract\": null\n}"
+        },
+        "url": {
+          "raw": "{{LARAVEL_URL}}/api/deposits/webhook",
+          "host": ["{{LARAVEL_URL}}"],
+          "path": ["api", "deposits", "webhook"]
+        },
+        "description": "**WEBHOOK ENDPOINT**: This is what your TRX Wallet Service will POST to your Laravel backend when a deposit is detected.\n\n**YOU NEED TO IMPLEMENT THIS IN LARAVEL:**\n```php\nRoute::post('/api/deposits/webhook', function (Request $request) {\n    // Verify HMAC signature\n    $signature = hash_hmac('sha256', $request->getContent(), env('WALLET_API_SECRET'));\n    if ($signature !== $request->header('X-Signature')) {\n        abort(403, 'Invalid signature');\n    }\n\n    $deposit = $request->all();\n\n    // Update user balance\n    User::find($deposit['user_id'])->increment('balance', $deposit['amount']);\n\n    // Log deposit\n    Deposit::create([\n        'user_id' => $deposit['user_id'],\n        'network' => $deposit['network'],\n        'coin_symbol' => $deposit['coin_symbol'],\n        'amount' => $deposit['amount'],\n        'tx_hash' => $deposit['tx_hash'],\n        'from_address' => $deposit['from_address'],\n        'to_address' => $deposit['to_address'],\n        'confirmations' => $deposit['confirmations'],\n        'block_number' => $deposit['block_number'],\n    ]);\n\n    return response()->json(['success' => true]);\n});\n```\n\n**Webhook Data:**\n- `user_id`: Laravel user ID\n- `network`: \"tron\"\n- `coin_symbol`: \"TRX\" or \"USDT\" etc.\n- `amount`: Deposit amount\n- `from_address`: Sender address\n- `to_address`: User's deposit address\n- `tx_hash`: Transaction hash\n- `confirmations`: Number of confirmations\n- `block_number`: Block number\n- `timestamp`: Unix timestamp\n- `token_contract`: TRC20 contract address (null for TRX)"
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "https://trx-wallet.exbotixgenie.com",
+      "type": "string"
+    },
+    {
+      "key": "LARAVEL_URL",
+      "value": "https://api.thinkoworkspace.com",
+      "type": "string"
+    },
+    {
+      "key": "HMAC_SIGNATURE",
+      "value": "calculated_hmac_sha256_signature",
+      "type": "string"
+    }
+  ]
+}

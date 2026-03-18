@@ -16,6 +16,8 @@ export class BootstrapService implements OnModuleInit {
   private laravelUrl: string;
   private laravelApiSecret: string;
   private autoStart: boolean;
+  private retryInterval: NodeJS.Timeout | null = null;
+  private isListenerStarted: boolean = false;
 
   constructor(
     private configService: ConfigService,
@@ -37,26 +39,67 @@ export class BootstrapService implements OnModuleInit {
 
     console.log('🚀 Bootstrap: Auto-starting TRON listener...');
 
+    // Start retry loop
+    await this.tryFetchAndStartListener();
+  }
+
+  /**
+   * Attempts to fetch addresses and start listener with retry mechanism
+   */
+  private async tryFetchAndStartListener() {
+    if (this.isListenerStarted) {
+      console.log('✅ Listener already started, skipping fetch');
+      return;
+    }
+
     try {
       // Fetch all addresses from Laravel
       const addresses = await this.fetchAddressesFromLaravel();
 
       if (addresses.length === 0) {
-        console.log('⚠️  No addresses found in Laravel. Listener will start when addresses are registered.');
+        console.log('⚠️  No addresses found in Laravel.');
+        console.log('🔄 Will retry in 5 minutes...');
+        this.scheduleRetry();
         return;
       }
 
       // Start listener in background (don't await - it runs indefinitely)
       this.listenerService.startListener(addresses).catch((error) => {
         console.error('❌ Listener crashed:', error.message);
+        this.isListenerStarted = false;
+        // Schedule retry if listener crashes
+        this.scheduleRetry();
       });
 
       console.log(`✅ Bootstrap complete: Monitoring ${addresses.length} addresses`);
+      this.isListenerStarted = true;
+
+      // Clear retry interval if it exists
+      if (this.retryInterval) {
+        clearInterval(this.retryInterval);
+        this.retryInterval = null;
+      }
     } catch (error) {
       console.error('❌ Bootstrap failed:', error.message);
       console.log('💡 Make sure Laravel is running and LARAVEL_URL is correct');
-      console.log('🔄 Will retry when addresses are registered via API');
+      console.log('🔄 Will retry in 5 minutes...');
+      this.scheduleRetry();
     }
+  }
+
+  /**
+   * Schedule retry after 5 minutes
+   */
+  private scheduleRetry() {
+    // Prevent multiple retry intervals
+    if (this.retryInterval) {
+      return;
+    }
+
+    this.retryInterval = setInterval(() => {
+      console.log('🔄 Retrying to fetch addresses from Laravel...');
+      this.tryFetchAndStartListener();
+    }, 300000); // 5 minutes
   }
 
   /**
@@ -97,5 +140,17 @@ export class BootstrapService implements OnModuleInit {
   async registerNewAddress(userId: number, address: string): Promise<void> {
     console.log(`➕ Registering new address: ${address} for user ${userId}`);
     await this.listenerService.registerAddress(userId, address);
+
+    // Mark listener as started if registerAddress started it
+    if (!this.isListenerStarted) {
+      this.isListenerStarted = true;
+
+      // Clear retry interval if it exists
+      if (this.retryInterval) {
+        clearInterval(this.retryInterval);
+        this.retryInterval = null;
+        console.log('✅ Listener started via manual registration - stopping retry attempts');
+      }
+    }
   }
 }

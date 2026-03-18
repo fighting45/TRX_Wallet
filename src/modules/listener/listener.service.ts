@@ -24,6 +24,7 @@ export class ListenerService {
   private tronApiKey: string;
   private tronApiType: string; // 'jsonrpc' or 'rest'
   private monitoredAddresses: Map<string, number> = new Map(); // address -> userId
+  private isListenerRunning: boolean = false; // Track if listener is active
 
   constructor(
     private configService: ConfigService,
@@ -45,6 +46,11 @@ export class ListenerService {
    * Start monitoring TRON blockchain
    */
   async startListener(addresses: Array<{ user_id: number; address: string }>) {
+    if (this.isListenerRunning) {
+      console.log('⚠️  Listener already running, skipping duplicate start');
+      return;
+    }
+
     console.log('🔍 Starting TRON deposit listener...');
     console.log(`📡 Using ${this.tronApiType.toUpperCase()} API: ${this.tronRpcUrl}`);
     console.log(`👥 Monitoring ${addresses.length} TRON addresses`);
@@ -55,14 +61,21 @@ export class ListenerService {
       this.monitoredAddresses.set(addr.address.toLowerCase(), addr.user_id);
     }
 
+    this.isListenerRunning = true;
+
     let consecutiveErrors = 0;
     const maxConsecutiveErrors = 3;
 
     while (true) {
       try {
-        console.log(`🔍 Checking ${addresses.length} addresses for deposits...`);
-        // Check all monitored addresses
-        for (const addr of addresses) {
+        // Check all monitored addresses (from the Map, not the initial array)
+        const addressesToCheck = Array.from(this.monitoredAddresses.entries()).map(([address, user_id]) => ({
+          address,
+          user_id,
+        }));
+
+        console.log(`🔍 Checking ${addressesToCheck.length} addresses for deposits...`);
+        for (const addr of addressesToCheck) {
           console.log(`   📍 Checking address: ${addr.address}`);
           await this.checkTronDeposits(addr.user_id, addr.address);
         }
@@ -90,6 +103,21 @@ export class ListenerService {
   async registerAddress(userId: number, address: string) {
     console.log(`➕ Registering new address for monitoring: ${address} (user ${userId})`);
     this.monitoredAddresses.set(address.toLowerCase(), userId);
+
+    // Auto-start listener if not already running
+    if (!this.isListenerRunning) {
+      console.log('🚀 Listener not running - starting now with registered addresses...');
+      const addresses = Array.from(this.monitoredAddresses.entries()).map(([address, user_id]) => ({
+        address,
+        user_id,
+      }));
+
+      // Start listener in background (don't await - it runs indefinitely)
+      this.startListener(addresses).catch((error) => {
+        console.error('❌ Listener crashed:', error.message);
+        this.isListenerRunning = false; // Reset flag on crash
+      });
+    }
   }
 
   /**

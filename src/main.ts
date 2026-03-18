@@ -39,6 +39,8 @@ async function bootstrap() {
       "- Never exposes private keys via API"
     )
     .setVersion("1.0")
+    .addServer("https://trx-wallet.exbotixgenie.com", "Production Server")
+    .addServer("http://localhost:3002", "Local Development")
     .addTag("Laravel Integration", "Endpoints for Laravel wallet integration")
     .build();
 
