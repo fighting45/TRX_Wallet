@@ -269,6 +269,9 @@ export class ListenerService {
    * Parse USDT TRC20 transaction and extract deposit data
    */
   private async parseTronTransaction(tx: any, userId: number, address: string) {
+    // DEBUG: Log raw transaction format
+    console.log('🔍 DEBUG - Raw TRC20 transaction:', JSON.stringify(tx, null, 2));
+
     // TronGrid's /transactions/trc20 endpoint returns simplified format
     const coinSymbol = tx.token_info?.symbol || 'USDT';
     const decimals = tx.token_info?.decimals || 6;
@@ -423,6 +426,9 @@ export class ListenerService {
    */
   private async notifyLaravelDeposit(depositData: any) {
     try {
+      // DEBUG: Log what we're sending
+      console.log('📤 Sending to Laravel:', JSON.stringify(depositData, null, 2));
+
       // Convert to JSON string (this is what we'll sign AND send)
       const jsonPayload = JSON.stringify(depositData);
 
@@ -433,7 +439,7 @@ export class ListenerService {
         .digest('hex');
 
       // Send webhook FIRST - send the EXACT string we signed
-      await axios.post(this.laravelWebhookUrl, jsonPayload, {
+      const response = await axios.post(this.laravelWebhookUrl, jsonPayload, {
         headers: {
           'X-Signature': signature,
           'Content-Type': 'application/json',
@@ -449,6 +455,10 @@ export class ListenerService {
       );
     } catch (error) {
       console.error('❌ Failed to notify Laravel:', error.message);
+      if (error.response) {
+        console.error('   Response status:', error.response.status);
+        console.error('   Response data:', JSON.stringify(error.response.data));
+      }
       console.log(`🔄 Will retry on next check cycle (transaction not marked as processed)`);
     }
   }
