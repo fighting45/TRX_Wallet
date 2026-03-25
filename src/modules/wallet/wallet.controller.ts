@@ -5,7 +5,6 @@ import { EncryptionService, EncryptedData } from '../encryption/encryption.servi
 import { BootstrapService } from '../listener/bootstrap.service';
 import { ConfigService } from '@nestjs/config';
 import {
-  GenerateMnemonicResponseDto,
   GetAddressRequestDto,
   GetAddressResponseDto,
   ValidateAddressRequestDto,
@@ -29,44 +28,12 @@ export class WalletController {
   }
 
   /**
-   * Generate a new mnemonic
-   * POST /wallet/generate-mnemonic
-   */
-  @Post('generate-mnemonic')
-  @ApiOperation({
-    summary: '1. Generate Master Mnemonic (One-Time Setup)',
-    description:
-      'Generate encrypted BIP39 mnemonic for your application.\n\n' +
-      '**IMPORTANT:** Run this ONCE during initial Laravel setup.\n\n' +
-      'Steps:\n' +
-      '1. Call this endpoint to generate encrypted mnemonic\n' +
-      '2. Store the entire `encrypted_mnemonic` object in Laravel database\n' +
-      '3. Use the same mnemonic for all user address generation\n\n' +
-      'Security: Mnemonic is encrypted with AES-256-GCM using MASTER_PASSWORD.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Encrypted mnemonic generated successfully',
-    type: GenerateMnemonicResponseDto,
-  })
-  generateMnemonic(@Body('word_count') wordCount?: 12 | 24) {
-    const mnemonic = this.walletService.generateMnemonic(wordCount || 12);
-    const encrypted = this.encryptionService.encrypt(mnemonic, this.masterPassword);
-
-    return {
-      success: true,
-      encrypted_mnemonic: encrypted,
-      message: 'Mnemonic generated and encrypted. Store this securely in Laravel database.',
-    };
-  }
-
-  /**
    * Get address for user (generate if not exists)
    * POST /wallet/get-address
    */
   @Post('get-address')
   @ApiOperation({
-    summary: '2. Generate User Deposit Address (Main Integration)',
+    summary: '1. Generate User Deposit Address (Main Integration)',
     description:
       'Generate TRON address for a specific user.\n\n' +
       '**When to call:**\n' +
@@ -136,7 +103,7 @@ export class WalletController {
    */
   @Post('validate-mnemonic')
   @ApiOperation({
-    summary: '4. Validate Mnemonic (Optional Helper)',
+    summary: '3. Validate Mnemonic (Optional Helper)',
     description:
       'Validate BIP39 mnemonic phrase.\n\n' +
       '**Use cases:**\n' +
@@ -188,7 +155,7 @@ export class WalletController {
    */
   @Post('validate-address')
   @ApiOperation({
-    summary: '3. Validate TRON Address (Optional Helper)',
+    summary: '2. Validate TRON Address (Optional Helper)',
     description:
       'Validate TRON address format before processing.\n\n' +
       '**Use cases:**\n' +
@@ -223,7 +190,7 @@ export class WalletController {
    */
   @Post('total-balance')
   @ApiOperation({
-    summary: '5. Get Total USDT Balance (Admin Panel)',
+    summary: '4. Get Total USDT Balance (Admin Panel)',
     description:
       'Query total USDT balance across all addresses derived from a mnemonic.\n\n' +
       '**Use case:**\n' +

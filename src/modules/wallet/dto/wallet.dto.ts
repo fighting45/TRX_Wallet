@@ -36,19 +36,6 @@ export class EncryptedDataDto {
   authTag: string;
 }
 
-export class GenerateMnemonicResponseDto {
-  @ApiProperty({ example: true })
-  success: boolean;
-
-  @ApiProperty({ type: EncryptedDataDto })
-  encrypted_mnemonic: EncryptedDataDto;
-
-  @ApiProperty({
-    example: 'Mnemonic generated and encrypted. Store this securely in Laravel database.',
-  })
-  message: string;
-}
-
 export class GetAddressRequestDto {
   @ApiProperty({
     description: 'Encrypted mnemonic from Laravel database',
