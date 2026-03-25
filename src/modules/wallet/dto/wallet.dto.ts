@@ -1,28 +1,38 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsNotEmpty, IsNumber, IsString, ValidateNested, IsInt, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class EncryptedDataDto {
   @ApiProperty({
     description: 'AES-256-GCM encrypted data',
     example: 'f9396b05abeb1037fc6aa3ab017ae10dadd94900f805a005a5ff362cf4e0b4cf...',
   })
+  @IsNotEmpty()
+  @IsString()
   encrypted: string;
 
   @ApiProperty({
     description: 'Initialization vector for decryption',
     example: 'b88c7c185a2012327dc11caec3d7e9fd',
   })
+  @IsNotEmpty()
+  @IsString()
   iv: string;
 
   @ApiProperty({
     description: 'Salt used for key derivation',
     example: '2bfd374a44fa761eb54f9964dbc12778ce5e757e50f5fbd9efe25b8183d854bf',
   })
+  @IsNotEmpty()
+  @IsString()
   salt: string;
 
   @ApiProperty({
     description: 'Authentication tag for data integrity',
     example: '372341bb8cd9b0667937fbe68650be07',
   })
+  @IsNotEmpty()
+  @IsString()
   authTag: string;
 }
 
@@ -44,6 +54,9 @@ export class GetAddressRequestDto {
     description: 'Encrypted mnemonic from Laravel database',
     type: EncryptedDataDto,
   })
+  @ValidateNested()
+  @Type(() => EncryptedDataDto)
+  @IsNotEmpty()
   encrypted_mnemonic: EncryptedDataDto;
 
   @ApiProperty({
@@ -51,6 +64,9 @@ export class GetAddressRequestDto {
     example: 0,
     minimum: 0,
   })
+  @IsNotEmpty()
+  @IsInt()
+  @Min(0)
   index: number;
 
   @ApiProperty({
@@ -58,6 +74,9 @@ export class GetAddressRequestDto {
     example: 1,
     required: true,
   })
+  @IsNotEmpty({ message: 'user_id is required for automatic address monitoring' })
+  @IsInt()
+  @Min(1)
   user_id: number;
 }
 

@@ -98,31 +98,31 @@ export class WalletController {
       },
     },
   })
-  async getAddressForUser(
-    @Body('encrypted_mnemonic') encryptedMnemonic: EncryptedData,
-    @Body('index') index: number,
-    @Body('user_id') userId?: number,
-  ) {
+  async getAddressForUser(@Body() dto: GetAddressRequestDto) {
     try {
+      console.log(`📝 Generating address for user ${dto.user_id} with index ${dto.index}`);
+
       // Decrypt mnemonic
-      const mnemonic = this.encryptionService.decrypt(encryptedMnemonic, this.masterPassword);
+      const mnemonic = this.encryptionService.decrypt(dto.encrypted_mnemonic, this.masterPassword);
 
       // Derive address
-      const addressData = this.walletService.deriveAddress(mnemonic, index);
+      const addressData = this.walletService.deriveAddress(mnemonic, dto.index);
+      console.log(`✅ Address generated: ${addressData.address}`);
 
-      // Auto-register with listener if user_id provided
-      if (userId) {
-        await this.bootstrapService.registerNewAddress(userId, addressData.address);
-      }
+      // Auto-register with listener (user_id is now required)
+      console.log(`🔔 Registering address ${addressData.address} for monitoring...`);
+      await this.bootstrapService.registerNewAddress(dto.user_id, addressData.address);
+      console.log(`✅ Address registered successfully for user ${dto.user_id}`);
 
       return {
         success: true,
         address: addressData.address,
         index: addressData.index,
         derivation_path: addressData.derivationPath,
-        monitoring: userId ? true : false,
+        monitoring: true, // Always true since user_id is required
       };
     } catch (error) {
+      console.error(`❌ Error generating address:`, error.message);
       return {
         success: false,
         error: error.message,

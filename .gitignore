@@ -48,3 +48,6 @@ get-private-key-by-address.js
 find-address.js
 get-private-key-index9.js
 get-private-keys.js
+export-private-keys.js
+export-all-with-balance.js
+count-addresses.js

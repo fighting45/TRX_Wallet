@@ -2,6 +2,7 @@ import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
 import { ConfigService } from "@nestjs/config";
 import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
+import { ValidationPipe } from "@nestjs/common";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -15,6 +16,18 @@ async function bootstrap() {
     origin: configService.get("LARAVEL_URL"),
     credentials: true,
   });
+
+  // Enable validation globally
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true, // Strip properties that don't have decorators
+      forbidNonWhitelisted: false, // Don't throw error for extra properties
+      transform: true, // Auto-transform payloads to DTO instances
+      transformOptions: {
+        enableImplicitConversion: true, // Auto-convert types (string to number, etc.)
+      },
+    })
+  );
 
   // Global prefix
   app.setGlobalPrefix("api");
