@@ -4,7 +4,8 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { WalletModule } from "./modules/wallet/wallet.module";
 import { ListenerModule } from "./modules/listener/listener.module";
 import { EncryptionModule } from "./modules/encryption/encryption.module";
-import { ProcessedDeposit, NetworkSyncState } from "./entities";
+import { SweeperModule } from "./modules/sweeper/sweeper.module";
+import { ProcessedDeposit, NetworkSyncState, SweepTransaction } from "./entities";
 
 @Module({
   imports: [
@@ -25,7 +26,7 @@ import { ProcessedDeposit, NetworkSyncState } from "./entities";
         username: configService.get("DB_USERNAME", "postgres"),
         password: configService.get("DB_PASSWORD", "password"),
         database: configService.get("DB_DATABASE", "tron_wallet"),
-        entities: [ProcessedDeposit, NetworkSyncState],
+        entities: [ProcessedDeposit, NetworkSyncState, SweepTransaction],
         synchronize: configService.get("NODE_ENV") === "development", // Auto-create tables in dev
         logging: configService.get("DB_LOGGING", "false") === "true",
       }),
@@ -35,6 +36,7 @@ import { ProcessedDeposit, NetworkSyncState } from "./entities";
     WalletModule,
     ListenerModule,
     EncryptionModule,
+    SweeperModule,
   ],
 })
 export class AppModule {}
