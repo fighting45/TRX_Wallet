@@ -144,9 +144,9 @@ export class SweeperService implements OnModuleInit {
   }
 
   /**
-   * Get USDT balance for an address and check if it's a new wallet
+   * Get USDT balance for an address
    */
-  async getUsdtBalanceAndStatus(address: string): Promise<{ balance: number; hasReceivedUsdt: boolean }> {
+  private async getUsdtBalance(address: string): Promise<number> {
     try {
       const apiKey = this.getNextApiKey();
       const headers = apiKey ? { 'TRON-PRO-API-KEY': apiKey } : {};
@@ -157,10 +157,7 @@ export class SweeperService implements OnModuleInit {
       });
 
       const accountData = response.data.data?.[0];
-      if (!accountData) return { balance: 0, hasReceivedUsdt: false };
-
-      let balance = 0;
-      let hasReceivedUsdt = false;
+      if (!accountData) return 0;
 
       if (accountData.trc20) {
         const trc20Data = Array.isArray(accountData.trc20) ? accountData.trc20 : [accountData.trc20];
@@ -168,27 +165,17 @@ export class SweeperService implements OnModuleInit {
         for (const tokenEntry of trc20Data) {
           for (const [contractAddress, balanceRaw] of Object.entries(tokenEntry)) {
             if (contractAddress === this.USDT_CONTRACT) {
-              balance = Number(balanceRaw) / Math.pow(10, this.USDT_DECIMALS);
-              hasReceivedUsdt = true; // Has USDT history
-              break;
+              return Number(balanceRaw) / Math.pow(10, this.USDT_DECIMALS);
             }
           }
         }
       }
 
-      return { balance, hasReceivedUsdt };
+      return 0;
     } catch (error) {
       this.logger.error(`Failed to get USDT balance for ${address}: ${error.message}`);
-      return { balance: 0, hasReceivedUsdt: false };
+      return 0;
     }
-  }
-
-  /**
-   * Get USDT balance for an address (backward compatibility)
-   */
-  private async getUsdtBalance(address: string): Promise<number> {
-    const result = await this.getUsdtBalanceAndStatus(address);
-    return result.balance;
   }
 
   /**

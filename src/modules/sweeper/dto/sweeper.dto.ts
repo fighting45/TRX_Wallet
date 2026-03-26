@@ -91,9 +91,6 @@ export class AddressBalanceInfo {
 
   @ApiProperty({ example: '150.50' })
   usdt_balance: string;
-
-  @ApiProperty({ example: 15, description: 'Estimated TRX needed for gas fee' })
-  estimated_trx_fee: number;
 }
 
 export class EstimateSweepResponseDto {
@@ -112,8 +109,11 @@ export class EstimateSweepResponseDto {
   @ApiProperty({ example: 100.50, description: 'Admin wallet current TRX balance' })
   admin_trx_balance: string;
 
-  @ApiProperty({ example: '45.00', description: 'Total TRX required for all sweeps' })
+  @ApiProperty({ example: '37.50', description: 'Total TRX required for all sweeps' })
   total_trx_required: string;
+
+  @ApiProperty({ example: 7.5, description: 'TRX cost per address (fixed for non-empty wallets)' })
+  trx_per_address: number;
 
   @ApiProperty({ example: 5, description: 'Number of addresses to sweep' })
   address_count: number;
