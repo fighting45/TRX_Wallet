@@ -91,6 +91,9 @@ export class AddressBalanceInfo {
 
   @ApiProperty({ example: '150.50' })
   usdt_balance: string;
+
+  @ApiProperty({ example: 15, description: 'Estimated TRX needed for gas fee' })
+  estimated_trx_fee: number;
 }
 
 export class EstimateSweepResponseDto {
@@ -106,17 +109,17 @@ export class EstimateSweepResponseDto {
   @ApiProperty({ example: 'TYourAdminAddressHere' })
   admin_address: string;
 
-  @ApiProperty({ example: 650000, description: 'Admin wallet staked energy available' })
-  admin_energy_available: number;
+  @ApiProperty({ example: 100.50, description: 'Admin wallet current TRX balance' })
+  admin_trx_balance: string;
 
-  @ApiProperty({ example: 325000, description: 'Total energy required for all sweeps' })
-  admin_energy_required: number;
-
-  @ApiProperty({ example: '1.5', description: 'Estimated TRX cost for delegation transactions' })
-  delegation_tx_cost_trx: string;
+  @ApiProperty({ example: '45.00', description: 'Total TRX required for all sweeps' })
+  total_trx_required: string;
 
   @ApiProperty({ example: 5, description: 'Number of addresses to sweep' })
   address_count: number;
+
+  @ApiProperty({ example: true, description: 'Whether admin wallet has sufficient TRX balance' })
+  sufficient_balance: boolean;
 }
 
 export class SweepTransactionResult {
@@ -126,7 +129,7 @@ export class SweepTransactionResult {
   @ApiProperty({ example: 'abc123def456...' })
   tx_hash: string;
 
-  @ApiProperty({ example: 'def456abc123...', nullable: true })
+  @ApiProperty({ example: 'def456abc123...', nullable: true, description: 'TRX funding transaction hash' })
   delegation_tx_hash: string;
 
   @ApiProperty({ example: '150.50' })
@@ -176,8 +179,7 @@ export class SweepStatusResponseDto {
       from_address: { type: 'string', example: 'TW6nF3VcaNgjWsxCHJ6F1PqHiynSxfP5KK' },
       to_address: { type: 'string', example: 'TAdmin...' },
       usdt_amount: { type: 'string', example: '150.50' },
-      delegation_tx_hash: { type: 'string', example: 'def456abc123...' },
-      energy_used: { type: 'number', example: 65000 },
+      funding_tx_hash: { type: 'string', example: 'def456abc123...', description: 'TRX funding transaction' },
       block_number: { type: 'string', example: '58123456' },
       created_at: { type: 'string', example: '2026-03-26T12:00:00Z' },
       error_message: { type: 'string', example: null, nullable: true },

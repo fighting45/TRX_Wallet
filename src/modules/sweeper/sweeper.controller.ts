@@ -30,17 +30,20 @@ export class SweeperController {
   @ApiOperation({
     summary: '1. Estimate Sweep Costs',
     description:
-      'Scan HD wallet addresses for USDT balances and estimate sweep costs.\n\n' +
+      'Scan HD wallet addresses for USDT balances and estimate TRX costs.\n\n' +
       '**Process:**\n' +
       '1. Scans addresses from start_index to end_index\n' +
       '2. Identifies addresses with USDT balance >= min_balance\n' +
-      '3. Calculates total USDT to sweep\n' +
-      '4. Estimates energy requirements and delegation costs\n\n' +
+      '3. Determines if each wallet is empty (first USDT) or non-empty\n' +
+      '4. Calculates TRX required: 7.5 TRX per address (~$2.25)\n' +
+      '   - All addresses have USDT balance (non-empty wallets)\n' +
+      '   - Actual cost: ~6.7 TRX, sending 7.5 TRX (12% buffer)\n\n' +
       '**Returns:**\n' +
-      '- List of addresses to sweep\n' +
+      '- List of addresses to sweep with individual costs\n' +
       '- Total USDT amount\n' +
-      '- Admin wallet energy status\n' +
-      '- Estimated costs',
+      '- Admin wallet TRX balance\n' +
+      '- Total TRX required\n' +
+      '- Whether admin has sufficient balance',
   })
   @ApiBody({ type: EstimateSweepDto })
   @ApiResponse({
@@ -66,13 +69,10 @@ export class SweeperController {
       // Calculate totals
       const totalUsdt = addressesWithBalance.reduce((sum, addr) => sum + parseFloat(addr.balance), 0);
       const addressCount = addressesWithBalance.length;
-      const energyRequired = addressCount * 65000; // 65k energy per transfer
+      const totalTrxFee = addressCount * 7.5; // 7.5 TRX per address (all are non-empty with USDT)
 
-      // Get admin wallet energy
-      const adminEnergyAvailable = await this.sweeperService.getAdminWalletEnergy();
-
-      // Estimate delegation tx costs (~0.3 TRX per address for delegation transaction)
-      const delegationCost = (addressCount * 0.3).toFixed(2);
+      // Get admin wallet TRX balance
+      const adminTrxBalance = await this.sweeperService.getAdminWalletTrxBalance();
 
       const adminAddress = this.configService.get('ADMIN_WALLET_ADDRESS');
 
@@ -85,10 +85,11 @@ export class SweeperController {
         })),
         total_usdt: totalUsdt.toFixed(6),
         admin_address: adminAddress,
-        admin_energy_available: adminEnergyAvailable,
-        admin_energy_required: energyRequired,
-        delegation_tx_cost_trx: delegationCost,
+        admin_trx_balance: adminTrxBalance.toFixed(2),
+        total_trx_required: totalTrxFee.toFixed(2),
+        trx_per_address: 7.5,
         address_count: addressCount,
+        sufficient_balance: adminTrxBalance >= totalTrxFee,
       };
     } catch (error) {
       console.error(`❌ Estimate failed:`, error.message);
@@ -108,14 +109,19 @@ export class SweeperController {
       '1. Validates confirm=true flag\n' +
       '2. Decrypts mnemonic and derives private keys\n' +
       '3. For each address sequentially:\n' +
-      '   a. Delegates energy from admin wallet\n' +
-      '   b. Waits for delegation confirmation\n' +
-      '   c. Transfers USDT to admin wallet\n' +
+      '   a. Admin sends TRX to source address for gas\n' +
+      '   b. Waits for TRX transfer confirmation (~3 sec)\n' +
+      '   c. Source address transfers USDT to admin\n' +
       '   d. Saves transaction to database\n\n' +
-      '**Fee Delegation:**\n' +
-      '- Admin wallet pays all gas costs\n' +
-      '- Source addresses need ZERO TRX\n' +
-      '- Uses delegated energy for transfers\n\n' +
+      '**Fee Payment:**\n' +
+      '- Admin wallet pays all gas costs (sends TRX first)\n' +
+      '- Source addresses receive TRX temporarily for gas\n' +
+      '- Gas is burned during USDT transfer\n' +
+      '- No staking required, just sufficient TRX balance\n\n' +
+      '**Cost per address:**\n' +
+      '- Fixed: 7.5 TRX per address (~$2.25 @ $0.30/TRX)\n' +
+      '- Actual consumption: ~6.7 TRX (12% buffer included)\n' +
+      '- All addresses are non-empty (have USDT balance)\n\n' +
       '**Returns:**\n' +
       '- Transaction hashes for each sweep\n' +
       '- Success/failure status per address\n' +
@@ -263,8 +269,7 @@ export class SweeperController {
           from_address: transaction.fromAddress,
           to_address: transaction.toAddress,
           usdt_amount: transaction.usdtAmount,
-          delegation_tx_hash: transaction.delegationTxHash,
-          energy_used: transaction.energyUsed,
+          funding_tx_hash: transaction.delegationTxHash, // TRX funding transaction
           block_number: transaction.blockNumber,
           created_at: transaction.createdAt,
           error_message: transaction.errorMessage,

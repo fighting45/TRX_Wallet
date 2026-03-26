@@ -31,7 +31,8 @@ export class SweeperService implements OnModuleInit {
   private currentApiKeyIndex = 0;
   private readonly USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
   private readonly USDT_DECIMALS = 6;
-  private readonly ENERGY_PER_TRANSFER = 65000; // For non-empty wallets
+  private readonly TRX_FEE_PER_SWEEP = 7.5; // TRX needed per sweep (~6.7 TRX actual + 12% buffer)
+  private readonly FEE_LIMIT = 20_000_000; // 20 TRX fee limit (3x actual cost)
 
   constructor(
     @InjectRepository(SweepTransaction)
@@ -143,9 +144,9 @@ export class SweeperService implements OnModuleInit {
   }
 
   /**
-   * Get USDT balance for an address
+   * Get USDT balance for an address and check if it's a new wallet
    */
-  private async getUsdtBalance(address: string): Promise<number> {
+  async getUsdtBalanceAndStatus(address: string): Promise<{ balance: number; hasReceivedUsdt: boolean }> {
     try {
       const apiKey = this.getNextApiKey();
       const headers = apiKey ? { 'TRON-PRO-API-KEY': apiKey } : {};
@@ -156,7 +157,10 @@ export class SweeperService implements OnModuleInit {
       });
 
       const accountData = response.data.data?.[0];
-      if (!accountData) return 0;
+      if (!accountData) return { balance: 0, hasReceivedUsdt: false };
+
+      let balance = 0;
+      let hasReceivedUsdt = false;
 
       if (accountData.trc20) {
         const trc20Data = Array.isArray(accountData.trc20) ? accountData.trc20 : [accountData.trc20];
@@ -164,23 +168,33 @@ export class SweeperService implements OnModuleInit {
         for (const tokenEntry of trc20Data) {
           for (const [contractAddress, balanceRaw] of Object.entries(tokenEntry)) {
             if (contractAddress === this.USDT_CONTRACT) {
-              return Number(balanceRaw) / Math.pow(10, this.USDT_DECIMALS);
+              balance = Number(balanceRaw) / Math.pow(10, this.USDT_DECIMALS);
+              hasReceivedUsdt = true; // Has USDT history
+              break;
             }
           }
         }
       }
 
-      return 0;
+      return { balance, hasReceivedUsdt };
     } catch (error) {
       this.logger.error(`Failed to get USDT balance for ${address}: ${error.message}`);
-      return 0;
+      return { balance: 0, hasReceivedUsdt: false };
     }
   }
 
   /**
-   * Get available energy for admin wallet
+   * Get USDT balance for an address (backward compatibility)
    */
-  async getAdminWalletEnergy(): Promise<number> {
+  private async getUsdtBalance(address: string): Promise<number> {
+    const result = await this.getUsdtBalanceAndStatus(address);
+    return result.balance;
+  }
+
+  /**
+   * Get admin wallet TRX balance
+   */
+  async getAdminWalletTrxBalance(): Promise<number> {
     try {
       const apiKey = this.getNextApiKey();
       const tronWeb = new TronWeb({
@@ -188,19 +202,19 @@ export class SweeperService implements OnModuleInit {
         headers: apiKey ? { 'TRON-PRO-API-KEY': apiKey } : {},
       });
 
-      const account = await tronWeb.trx.getAccountResources(this.adminWalletAddress);
-      return account.EnergyLimit || 0;
+      const balance = await tronWeb.trx.getBalance(this.adminWalletAddress);
+      return balance / 1_000_000; // Convert from SUN to TRX
     } catch (error) {
-      this.logger.error(`Failed to get admin wallet energy: ${error.message}`);
+      this.logger.error(`Failed to get admin wallet TRX balance: ${error.message}`);
       return 0;
     }
   }
 
   /**
-   * Delegate energy to a recipient address
+   * Send TRX from admin wallet to recipient address (for gas fees)
    */
-  async delegateEnergyToAddress(recipientAddress: string, energyAmount: number): Promise<string> {
-    this.logger.log(`⚡ Delegating ${energyAmount} energy to ${recipientAddress}...`);
+  async sendTrxForGas(recipientAddress: string, amountTrx: number): Promise<string> {
+    this.logger.log(`💰 Sending ${amountTrx} TRX to ${recipientAddress} for gas...`);
 
     try {
       const apiKey = this.getNextApiKey();
@@ -210,33 +224,25 @@ export class SweeperService implements OnModuleInit {
         privateKey: this.adminWalletPrivateKey,
       });
 
-      // Build delegation transaction
-      const transaction = await tronWeb.transactionBuilder.delegateResource(
-        energyAmount,
-        recipientAddress,
-        'ENERGY',
-        this.adminWalletAddress,
-        false, // lock
-        0, // lockPeriod
-      );
+      // Convert TRX to SUN (1 TRX = 1,000,000 SUN)
+      const amountSun = Math.floor(amountTrx * 1_000_000);
 
-      // Sign and broadcast
-      const signedTx = await tronWeb.trx.sign(transaction);
-      const broadcast = await tronWeb.trx.sendRawTransaction(signedTx);
+      // Send TRX transaction
+      const tx = await tronWeb.trx.sendTransaction(recipientAddress, amountSun);
 
-      if (!broadcast.result) {
-        throw new Error(`Delegation failed: ${JSON.stringify(broadcast)}`);
+      if (!tx.result) {
+        throw new Error(`TRX transfer failed: ${JSON.stringify(tx)}`);
       }
 
-      const txHash = broadcast.txid || broadcast.transaction?.txID;
-      this.logger.log(`✅ Energy delegation successful: ${txHash}`);
+      const txHash = tx.txid || tx.transaction?.txID;
+      this.logger.log(`✅ TRX transfer successful: ${txHash}`);
 
-      // Wait for confirmation
+      // Wait for confirmation (~3 seconds per block)
       await this.sleep(3000);
 
       return txHash;
     } catch (error) {
-      this.logger.error(`❌ Energy delegation failed: ${error.message}`);
+      this.logger.error(`❌ TRX transfer failed: ${error.message}`);
       throw error;
     }
   }
@@ -266,9 +272,13 @@ export class SweeperService implements OnModuleInit {
       // Convert amount to smallest unit (sun for USDT = 6 decimals)
       const amountInSun = Math.floor(parseFloat(amount) * Math.pow(10, this.USDT_DECIMALS));
 
+      // Fee limit: 20 TRX (3x buffer over ~6.7 TRX actual cost)
+      // Note: All addresses being swept already have USDT, so they're non-empty wallets
+      this.logger.log(`   Fee limit: 20 TRX (non-empty wallet with USDT)`);
+
       // Send transaction
       const tx = await contract.methods.transfer(toAddress, amountInSun).send({
-        feeLimit: 150000000, // 150 TRX fee limit
+        feeLimit: this.FEE_LIMIT,
       });
 
       this.logger.log(`✅ USDT transfer successful: ${tx}`);
@@ -291,22 +301,24 @@ export class SweeperService implements OnModuleInit {
     this.logger.log(`🧹 Sweeping ${balance} USDT from ${address} (index ${index})...`);
 
     try {
-      // Step 1: Delegate energy
-      const delegationTxHash = await this.delegateEnergyToAddress(address, this.ENERGY_PER_TRANSFER);
+      // Step 1: Send TRX from admin to source address for gas
+      // Note: All addresses have USDT balance, so they're non-empty wallets (65k energy)
+      this.logger.log(`   Sending ${this.TRX_FEE_PER_SWEEP} TRX for gas fees...`);
+      const fundingTxHash = await this.sendTrxForGas(address, this.TRX_FEE_PER_SWEEP);
 
-      // Step 2: Transfer USDT
+      // Step 2: Transfer USDT from source to admin
       const txHash = await this.transferUSDT(address, privateKey, this.adminWalletAddress, balance);
 
-      // Step 3: Save to database
+      // Step 4: Save to database
       const sweepTransaction = this.sweepTransactionRepository.create({
         txHash,
-        delegationTxHash,
+        delegationTxHash: fundingTxHash, // Repurpose field for TRX funding tx
         fromAddress: address,
         toAddress: this.adminWalletAddress,
         usdtAmount: balance,
         derivationIndex: index,
         status: 'pending',
-        energyUsed: this.ENERGY_PER_TRANSFER,
+        energyUsed: 0, // Not tracking energy anymore
       });
 
       await this.sweepTransactionRepository.save(sweepTransaction);
@@ -315,7 +327,7 @@ export class SweeperService implements OnModuleInit {
 
       return {
         txHash,
-        delegationTxHash,
+        delegationTxHash: fundingTxHash,
         status: 'pending',
       };
     } catch (error) {
